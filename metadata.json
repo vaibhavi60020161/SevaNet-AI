@@ -1,0 +1,14 @@
+{
+  "name": "SevaNet AI — Smart Resource Allocation System",
+  "description": "A dark command-center aesthetic system for NGOs in India to manage resources, volunteers, and tasks using AI-driven insights, heatmap visualizations, and OCR intake.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "AI-driven task allocation",
+    "Real-time resource heatmap",
+    "OCR-based data intake",
+    "Predictive analytics for NGO operations"
+  ]
+}
