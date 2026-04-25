@@ -26,11 +26,11 @@ export function MetricCard({ label, value, trend, icon: Icon, color }: any) {
 // Status Badge
 export function StatusBadge({ status }: { status: string }) {
   const styles: any = {
-    critical: "bg-brand-red/10 text-brand-red border-brand-red",
-    high: "bg-brand-amber/10 text-brand-amber border-brand-amber",
-    medium: "bg-brand-blue/10 text-brand-blue border-brand-blue",
-    low: "bg-brand-teal/10 text-brand-teal border-brand-teal",
-    verified: "bg-brand-teal/10 text-brand-teal border-brand-teal",
+    critical: "bg-brand-red/15 text-brand-red border-brand-red/30",
+    high: "bg-brand-amber/15 text-brand-amber border-brand-amber/30",
+    medium: "bg-brand-blue/15 text-brand-blue border-brand-blue/30",
+    low: "bg-brand-teal/15 text-brand-teal border-brand-teal/30",
+    verified: "bg-brand-teal/15 text-brand-teal border-brand-teal/30",
   };
 
   return (

@@ -57,12 +57,12 @@ export default function Dashboard() {
 
       {/* Main Content Row */}
       <div className="col-span-12 lg:col-span-8 grid grid-rows-[380px_180px] gap-4">
-        <div className="tactical-card !p-0 overflow-hidden bg-[#0c101a] relative">
-          <div className="panel-title sticky top-0 bg-brand-surface/90 backdrop-blur z-10 px-3 py-2 border-b border-brand-border">
+        <div className="tactical-card !p-0 overflow-hidden bg-white relative">
+          <div className="panel-title sticky top-0 bg-white/90 backdrop-blur z-10 px-3 py-2 border-b border-brand-border">
             <span>Regional Live Heatmap: Pune Districts</span>
           </div>
-          <div className="h-full w-full relative pattern-grid">
-            <svg className="w-full h-full opacity-10 pointer-events-none p-8" viewBox="0 0 400 400">
+          <div className="h-full w-full relative pattern-grid-light">
+            <svg className="w-full h-full opacity-20 pointer-events-none p-8" viewBox="0 0 400 400">
                <path fill="none" stroke="currentColor" strokeWidth="1" d="M50 50 L100 80 L150 40 L200 90 L300 70 L350 150 L300 250 L200 350 L100 300 L20 150 Z" />
             </svg>
             

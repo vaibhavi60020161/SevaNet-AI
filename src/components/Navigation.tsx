@@ -39,7 +39,7 @@ export function Sidebar() {
               "flex items-center gap-3 px-5 py-2.5 text-[13px] font-sans transition-all border-l-3",
               isActive 
                 ? "bg-brand-teal/[0.05] text-brand-teal border-brand-teal" 
-                : "text-brand-muted border-transparent hover:bg-white/[0.02] hover:text-brand-text"
+                : "text-brand-muted border-transparent hover:bg-brand-bg hover:text-brand-text"
             )}
           >
             <item.icon size={16} />
