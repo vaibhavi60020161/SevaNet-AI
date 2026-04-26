@@ -2,25 +2,33 @@ import React from "react";
 import { NavLink } from "react-router-dom";
 import { 
   LayoutDashboard, Map as MapIcon, Users, CheckSquare, 
-  Cpu, FileText, TrendingUp, History, Settings, Activity 
+  Cpu, FileText, TrendingUp, History, Settings, Activity,
+  PlusCircle
 } from "lucide-react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { cn } from "../lib/utils";
+import { useAuth } from "../contexts/AuthContext";
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: MapIcon, label: "Heatmap", path: "/heatmap" },
   { icon: Users, label: "Volunteers", path: "/volunteers" },
   { icon: CheckSquare, label: "Tasks", path: "/tasks" },
-  { icon: Cpu, label: "AI Engine", path: "/ai-engine" },
   { icon: FileText, label: "OCR Intake", path: "/ocr-intake" },
   { icon: TrendingUp, label: "Predictions", path: "/predictions" },
   { icon: History, label: "Impact Log", path: "/impact" },
-  { icon: Settings, label: "Admin", path: "/admin" },
+  { icon: PlusCircle, label: "Submit Need", path: "/submit-need" },
 ];
 
 export function Sidebar() {
+  const { user } = useAuth();
+  
+  const filteredItems = sidebarItems.filter(item => {
+    if (user?.role === "admin") return true;
+    return item.path === "/submit-need";
+  });
+
   return (
     <aside className="w-[200px] h-screen bg-brand-surface border-r border-brand-border flex flex-col fixed left-0 top-0 z-50">
       <div className="p-5 border-b border-brand-border">
@@ -31,7 +39,7 @@ export function Sidebar() {
       </div>
       
       <nav className="flex-1 py-3 overflow-y-auto">
-        {sidebarItems.map((item) => (
+        {filteredItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -50,10 +58,12 @@ export function Sidebar() {
 
       <div className="p-5 border-t border-brand-border mt-auto">
         <div className="bg-brand-bg p-2 rounded-sm border border-brand-border flex items-center gap-2">
-          <div className="w-8 h-8 bg-brand-teal rounded-sm flex-shrink-0" />
+          <div className="w-8 h-8 bg-brand-teal rounded-sm flex-shrink-0 flex items-center justify-center text-brand-bg font-bold text-xs">
+            {user?.name?.[0] || "O"}
+          </div>
           <div className="overflow-hidden">
-            <p className="text-[11px] font-bold truncate leading-none">Priya Sharma</p>
-            <p className="text-[9px] text-brand-muted font-mono mt-1 uppercase">Field Lead</p>
+            <p className="text-[11px] font-bold truncate leading-none">{user?.name || "Guest Operator"}</p>
+            <p className="text-[9px] text-brand-muted font-mono mt-1 uppercase">{user?.role || "Field Agent"}</p>
           </div>
         </div>
       </div>

@@ -2,66 +2,137 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import { connectDB, NeedModel, VolunteerModel, TaskModel, ImpactLogModel, UserModel } from "./src/db";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+
+const JWT_SECRET = process.env.JWT_SECRET || "seva-secret-key";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
+  await connectDB();
+  
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
 
-  // --- MOCK DATABASE ---
-  let needs = [
-    { id: "n1", category: "Food", location: "Hadapsar", lat: 18.5089, lng: 73.9259, urgency: "critical", families: 40, status: "pending", description: "Extreme shortage of dry rations in slum area." },
-    { id: "n2", category: "Medical", location: "Kothrud", lat: 18.5074, lng: 73.8077, urgency: "high", families: 15, status: "pending", description: "Insulin and basic antibiotics needed for elderly camp." },
-    { id: "n3", category: "Education", location: "Wanowrie", lat: 18.4901, lng: 73.8951, urgency: "medium", families: 22, status: "assigned", description: "Need 22 primary education kits for local school." },
-    { id: "n4", category: "Shelter", location: "Camp", lat: 18.5133, lng: 73.8767, urgency: "low", families: 5, status: "pending", description: "Temporary tarps needed for leak repairs." },
-    { id: "n5", category: "Food", location: "Dhanori", lat: 18.5775, lng: 73.8961, urgency: "high", families: 30, status: "pending", description: "Cooked meals required for daily labor group." },
-  ];
+  // Seed Data if empty
+  const seedIfEmpty = async () => {
+    const needCount = await NeedModel.countDocuments();
+    if (needCount === 0) {
+      await NeedModel.create([
+        { title: "Food Crisis", category: "Food", location: "Hadapsar", lat: 18.5089, lng: 73.9259, urgency: "critical", families: 40, status: "pending", description: "Extreme shortage of dry rations in slum area." },
+        { title: "Medical Support", category: "Medical", location: "Kothrud", lat: 18.5074, lng: 73.8077, urgency: "high", families: 15, status: "pending", description: "Insulin and basic antibiotics needed for elderly camp." },
+        { title: "Education Kits", category: "Education", location: "Wanowrie", lat: 18.4901, lng: 73.8951, urgency: "medium", families: 22, status: "assigned", description: "Need 22 primary education kits for local school." }
+      ]);
+      await VolunteerModel.create([
+        { name: "Priya Sharma", skills: ["Food Logistics", "Coordination"], location: "Hadapsar", lat: 18.5080, lng: 73.9250, distance: 0.5, status: "online", activeTaskId: null },
+        { name: "Dr. Anand Kumar", skills: ["Medical", "First Aid"], location: "Kothrud", lat: 18.5070, lng: 73.8070, distance: 1.2, status: "online", activeTaskId: null }
+      ]);
+      await TaskModel.create([
+        { title: "Deliver Education Kits", location: "Wanowrie", assignedTo: "Sneha Rao", status: "In Progress", deadline: "Today 5PM" }
+      ]);
+    }
+  };
+  await seedIfEmpty();
 
-  let volunteers = [
-    { id: "v1", name: "Priya Sharma", skills: ["Food Logistics", "Coordination"], location: "Hadapsar", lat: 18.5080, lng: 73.9250, distance: 0.5, status: "online", activeTaskId: null },
-    { id: "v2", name: "Dr. Anand Kumar", skills: ["Medical", "First Aid"], location: "Kothrud", lat: 18.5070, lng: 73.8070, distance: 1.2, status: "online", activeTaskId: null },
-    { id: "v3", name: "Sneha Rao", skills: ["Education", "Social Work"], location: "Wanowrie", lat: 18.4900, lng: 73.8950, distance: 0.8, status: "busy", activeTaskId: "t1" },
-    { id: "v4", name: "Rajan Mehta", skills: ["Transport", "Driving"], location: "Camp", lat: 18.5130, lng: 73.8760, distance: 2.5, status: "online", activeTaskId: null },
-  ];
+  // --- AUTH ROUTES ---
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { email, password, name, adminCode } = req.body;
+      const existing = await UserModel.findOne({ email });
+      if (existing) return res.status(400).json({ error: "User already exists" });
 
-  let tasks = [
-    { id: "t1", title: "Deliver Education Kits", location: "Wanowrie", category: "Education", assignedTo: "v3", urgency: "medium", status: "in-progress", deadline: "Today 5PM" },
-  ];
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      // If code is 'SEVA_ADMIN_2026', set as admin
+      const role = adminCode === "SEVA_ADMIN_2026" ? "admin" : "user";
+      
+      const user = await UserModel.create({ email, password: hashedPassword, name, role });
+      const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET);
+      res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+    } catch (err) {
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
 
-  let impactLogs = [
-    { id: "l1", type: "Food", location: "Hadapsar", impact: "120 meals delivered", date: "2026-04-20" },
-    { id: "l2", type: "Medical", location: "Kothrud", impact: "10 consults provided", date: "2026-04-22" },
-  ];
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      const user = await UserModel.findOne({ email });
+      if (!user) return res.status(400).json({ error: "Invalid credentials" });
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
+
+      const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET);
+      res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+    } catch (err) {
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
 
   // --- API ROUTES ---
 
   // Dashboard Stats
-  app.get("/api/stats", (req, res) => {
+  app.get("/api/stats", async (req, res) => {
+    const activeNeeds = await NeedModel.countDocuments({ status: "pending" });
+    const volunteersOnline = await VolunteerModel.countDocuments({ status: "online" });
     res.json({
-      activeNeeds: needs.filter(n => n.status === "pending").length,
-      volunteersOnline: volunteers.filter(v => v.status === "online").length,
-      tasksCompleted: 45, // Static for demo
-      peopleHelped: 1250, // Static for demo
+      activeNeeds,
+      volunteersOnline,
+      tasksCompleted: 45, 
+      peopleHelped: 1250,
     });
   });
 
   // Needs
-  app.get("/api/needs", (req, res) => {
+  app.get("/api/needs", async (req, res) => {
+    const needs = await NeedModel.find().sort({ createdAt: -1 });
     res.json(needs);
   });
 
+  app.post("/api/needs", async (req, res) => {
+    try {
+      const { title, description, category, urgency, location, userId } = req.body;
+      const newNeed = await NeedModel.create({
+        title,
+        description,
+        category,
+        urgency: urgency.toLowerCase(),
+        location,
+        userId,
+        status: 'pending',
+        lat: 18.5204 + (Math.random() - 0.5) * 0.1,
+        lng: 73.8567 + (Math.random() - 0.5) * 0.1,
+      });
+      res.json(newNeed);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to submit request" });
+    }
+  });
+
   // Volunteers
-  app.get("/api/volunteers", (req, res) => {
+  app.get("/api/volunteers", async (req, res) => {
+    const volunteers = await VolunteerModel.find();
     res.json(volunteers);
   });
 
   // Tasks
-  app.get("/api/tasks", (req, res) => {
-    res.json(tasks);
+  app.get("/api/tasks", async (req, res) => {
+    const tasks = await TaskModel.find();
+    res.json(tasks.map(t => ({
+      id: t._id,
+      title: t.title,
+      description: t.description,
+      location: t.location,
+      assignedTo: t.assignedTo,
+      status: t.status.toLowerCase().replace(" ", "-"),
+      deadline: t.deadline
+    })));
   });
 
   // Predictions
@@ -84,14 +155,13 @@ async function startServer() {
   });
 
   // AI Intake: Text
-  app.post("/api/intake/text", (req, res) => {
+  app.post("/api/intake/text", async (req, res) => {
     const { text } = req.body;
-    // Simple mock classifier
     const category = text.toLowerCase().includes("food") ? "Food" : text.toLowerCase().includes("med") ? "Medical" : "Shelter";
     const urgency = text.toLowerCase().includes("critical") || text.toLowerCase().includes("urgent") ? "critical" : "medium";
     
-    const newNeed = {
-      id: "n" + (needs.length + 1),
+    const newNeed = await NeedModel.create({
+      title: `${category} Support Request`,
       category,
       location: "Generated Area",
       lat: 18.52 + (Math.random() - 0.5) * 0.1,
@@ -100,45 +170,41 @@ async function startServer() {
       families: Math.floor(Math.random() * 50) + 1,
       status: "pending",
       description: text,
-    };
-    needs.push(newNeed);
+    });
     res.json({ success: true, need: newNeed });
   });
 
   // AI Matching
-  app.post("/api/tasks/match", (req, res) => {
+  app.post("/api/tasks/match", async (req, res) => {
     const { needId } = req.body;
-    const need = needs.find(n => n.id === needId);
+    const need = await NeedModel.findById(needId);
     if (!need) return res.status(404).json({ error: "Need not found" });
 
-    // Simple matching logic
-    const availableVolunteers = volunteers.filter(v => v.status === "online");
-    if (availableVolunteers.length === 0) return res.status(400).json({ error: "No volunteers available" });
+    const volunteer = await VolunteerModel.findOne({ status: "online" });
+    if (!volunteer) return res.status(400).json({ error: "No volunteers available" });
 
-    const volunteer = availableVolunteers[0]; // Just pick first for mock
-    
-    const newTask = {
-      id: "t" + (tasks.length + 1),
+    const newTask = await TaskModel.create({
       title: `Response: ${need.category} in ${need.location}`,
       location: need.location,
-      category: need.category,
       assignedTo: volunteer.name,
-      urgency: need.urgency,
-      status: "assigned",
+      status: "In Progress",
       deadline: "Within 2 hours",
-    };
+    });
     
-    tasks.push(newTask);
     need.status = "assigned";
+    await need.save();
+    
     volunteer.status = "busy";
-    volunteer.activeTaskId = newTask.id;
+    volunteer.activeTaskId = newTask._id.toString();
+    await volunteer.save();
 
     res.json({ success: true, task: newTask, volunteer });
   });
 
   // Impact
-  app.get("/api/impact", (req, res) => {
-    res.json(impactLogs);
+  app.get("/api/impact", async (req, res) => {
+    const logs = await ImpactLogModel.find().sort({ timestamp: -1 });
+    res.json(logs);
   });
 
   // --- VITE MIDDLEWARE ---
