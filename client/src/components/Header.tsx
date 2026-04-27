@@ -21,13 +21,18 @@ const Header = () => {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6">
-          <Link to="/" className="text-sm font-medium text-slate-600 hover:text-sky-600">Explore</Link>
+          <Link to="/" className="text-sm font-medium text-slate-600 hover:text-sky-600">Dashboard</Link>
+          <Link to="/heatmap" className="text-sm font-medium text-slate-600 hover:text-sky-600">Heatmap</Link>
           {user && (
             <>
-              <Link to="/submit-need" className="text-sm font-medium text-slate-600 hover:text-sky-600">Submit Need</Link>
-              <Link to="/feedback" className="text-sm font-medium text-slate-600 hover:text-sky-600">Give Feedback</Link>
+              <Link to="/submit-need" className="text-sm font-medium text-slate-600 hover:text-sky-600">Report</Link>
+              <Link to="/voice-intake" className="text-sm font-medium text-slate-600 hover:text-sky-600">Voice</Link>
+              <Link to="/matching" className="text-sm font-medium text-slate-600 hover:text-sky-600">Matching</Link>
+              <Link to="/missions" className="text-sm font-medium text-slate-600 hover:text-sky-600">Missions</Link>
+              <Link to="/crisis" className="text-sm font-medium text-slate-600 hover:text-sky-600">Crisis</Link>
+              <Link to="/impact" className="text-sm font-medium text-slate-600 hover:text-sky-600">Impact</Link>
               {user.role === 'admin' && (
-                <Link to="/admin/feedback" className="text-sm font-medium text-sky-600 font-semibold">Admin Panel</Link>
+                <Link to="/admin/feedback" className="text-sm font-medium text-sky-600 font-semibold underline decoration-2 underline-offset-4">Admin</Link>
               )}
             </>
           )}

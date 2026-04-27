@@ -5,6 +5,12 @@ import Dashboard from './pages/Dashboard';
 import SubmitNeed from './pages/SubmitNeed';
 import Feedback from './pages/Feedback';
 import AdminFeedback from './pages/AdminFeedback';
+import Heatmap from './pages/Heatmap';
+import CrisisPrediction from './pages/CrisisPrediction';
+import VolunteerMatching from './pages/VolunteerMatching';
+import MissionMode from './pages/MissionMode';
+import ImpactTracker from './pages/ImpactTracker';
+import VoiceIntake from './pages/VoiceIntake';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -25,6 +31,12 @@ const AppRoutes = () => {
           <Route path="/admin/feedback" element={user?.role === 'admin' ? <AdminFeedback /> : <Navigate to="/" />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/heatmap" element={<Heatmap />} />
+          <Route path="/crisis" element={user ? <CrisisPrediction /> : <Navigate to="/login" />} />
+          <Route path="/matching" element={user ? <VolunteerMatching /> : <Navigate to="/login" />} />
+          <Route path="/missions" element={user ? <MissionMode /> : <Navigate to="/login" />} />
+          <Route path="/impact" element={user ? <ImpactTracker /> : <Navigate to="/login" />} />
+          <Route path="/voice-intake" element={user ? <VoiceIntake /> : <Navigate to="/login" />} />
         </Routes>
       </main>
     </div>
