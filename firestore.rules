@@ -1,0 +1,124 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- USERS ---
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.keys().hasAll(['email', 'name', 'role', 'createdAt']) && 
+               data.keys().size() == 5 && // uid is also usually there if we set it in data
+               data.email is string && data.email.size() <= 200 &&
+               data.name is string && data.name.size() <= 100 &&
+               data.role in ['user', 'admin'] &&
+               data.createdAt is timestamp;
+      }
+
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().role == 'user';
+      allow update: if (isOwner(userId) || isAdmin()) && 
+                       isValidUser(incoming()) &&
+                       incoming().role == existing().role; // Users can't change their own role
+    }
+
+    // --- NEEDS ---
+    match /needs/{needId} {
+      function isValidNeed(data) {
+        return data.keys().hasAll(['title', 'description', 'location', 'category', 'urgency', 'status', 'createdAt']) &&
+               data.title is string && data.title.size() <= 200 &&
+               data.description is string && data.description.size() <= 2000 &&
+               data.location is string && data.location.size() <= 500 &&
+               data.category is string &&
+               data.urgency in ['low', 'medium', 'high', 'critical'] &&
+               data.status in ['pending', 'assigned', 'in-progress', 'completed'] &&
+               data.createdAt is timestamp;
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidNeed(incoming()) && incoming().userId == request.auth.uid;
+      allow update: if (isAdmin() || isOwner(existing().userId)) && 
+                       isValidNeed(incoming()) &&
+                       (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'location', 'category', 'urgency']));
+      allow delete: if isAdmin();
+    }
+
+    // --- VOLUNTEERS ---
+    match /volunteers/{volId} {
+      function isValidVolunteer(data) {
+        return data.keys().hasAll(['name', 'status', 'createdAt']) &&
+               data.name is string && data.name.size() <= 100 &&
+               data.status in ['online', 'busy', 'offline'] &&
+               data.createdAt is timestamp;
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isOwner(volId) && isValidVolunteer(incoming());
+      allow update: if (isOwner(volId) || isAdmin()) && isValidVolunteer(incoming());
+    }
+
+    // --- TASKS ---
+    match /tasks/{taskId} {
+      function isValidTask(data) {
+        return data.keys().hasAll(['title', 'status', 'createdAt']) &&
+               data.title is string && data.title.size() <= 200 &&
+               data.status in ['Pending', 'In Progress', 'Completed'] &&
+               data.createdAt is timestamp;
+      }
+
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // --- IMPACT LOGS ---
+    match /impactLogs/{logId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- FEEDBACK ---
+    match /feedback/{feedbackId} {
+      function isValidFeedback(data) {
+        return data.keys().hasAll(['userId', 'userName', 'type', 'rating', 'comment', 'createdAt']) &&
+               data.userId == request.auth.uid &&
+               data.userName is string &&
+               data.type in ['allocation', 'volunteer'] &&
+               data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+               data.comment is string && data.comment.size() <= 1000 &&
+               data.createdAt is timestamp;
+      }
+
+      allow create: if isSignedIn() && isValidFeedback(incoming());
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+  }
+}

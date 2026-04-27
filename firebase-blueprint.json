@@ -1,0 +1,124 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user or admin profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "name", "role", "createdAt"]
+    },
+    "Need": {
+      "title": "Need",
+      "description": "A request for assistance",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "location": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "category": { "type": "string" },
+        "urgency": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "status": { "type": "string", "enum": ["pending", "assigned", "in-progress", "completed"] },
+        "families": { "type": "number" },
+        "contact": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "location", "category", "urgency", "status", "createdAt"]
+    },
+    "Volunteer": {
+      "title": "Volunteer",
+      "description": "Volunteer profile and status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "location": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "status": { "type": "string", "enum": ["online", "busy", "offline"] },
+        "activeTaskId": { "type": "string" },
+        "impactScore": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "status", "createdAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Assigned intervention task",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "location": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "deadline": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "Completed"] },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "status", "createdAt"]
+    },
+    "ImpactLog": {
+      "title": "Impact Log",
+      "description": "Log of successful interventions",
+      "type": "object",
+      "properties": {
+        "event": { "type": "string" },
+        "desc": { "type": "string" },
+        "icon": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["event", "desc", "timestamp"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "User feedback on allocation or volunteers",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "type": { "type": "string", "enum": ["allocation", "volunteer"] },
+        "targetId": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "type", "rating", "comment", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "needs": {
+      "schema": "Need",
+      "description": "Assistance requests"
+    },
+    "volunteers": {
+      "schema": "Volunteer",
+      "description": "Volunteer status"
+    },
+    "tasks": {
+      "schema": "Task",
+      "description": "Work assignments"
+    },
+    "impactLogs": {
+      "schema": "ImpactLog",
+      "description": "Impact events"
+    },
+    "feedback": {
+      "schema": "Feedback",
+      "description": "Feedback and reviews"
+    }
+  }
+}

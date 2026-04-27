@@ -1,20 +1,14 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# SevaNet AI
 
-# Run and deploy your AI Studio app
+Smart NGO Allocation and Disaster Relief Coordination Platform.
 
-This contains everything you need to run your app locally.
+## Project Structure
 
-View your app in AI Studio: https://ai.studio/apps/20bb2707-436e-446d-a505-ba6e693ad741
+- `client/`: React frontend built with Vite, Tailwind CSS, and Shadcn UI.
+- `server/`: Node.js + Express backend with MongoDB (Mongoose) integration.
 
-## Run Locally
+## Getting Started
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Install dependencies: `npm install`
+2. Configure environment variables in `.env`
+3. Start the application: `npm run dev`
