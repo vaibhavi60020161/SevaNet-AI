@@ -1,41 +1,12 @@
-name: Deploy to GitHub Pages
+name: Vercel Auto-Deployment Status
 
 on:
   push:
     branches: ["main"]
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  build:
+  status:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      
-      - name: Install dependencies
-        run: npm install
-      
-      - name: Build client
-        run: npm run build:client
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v2
-        with:
-          path: './client/dist'
-      
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v2
+      - name: Acknowledge Vercel Deployment
+        run: echo "Vercel auto-deploys on every push to main. GitHub Pages is disabled to avoid API failures."
