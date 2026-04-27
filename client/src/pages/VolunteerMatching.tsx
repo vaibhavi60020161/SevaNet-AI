@@ -46,6 +46,7 @@ const VolunteerMatching = () => {
   const [loading, setLoading] = useState(true);
   const [matchingId, setMatchingId] = useState<string | null>(null);
   const [successMatch, setSuccessMatch] = useState<string | null>(null);
+  const [errorMatch, setErrorMatch] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,6 +57,8 @@ const VolunteerMatching = () => {
           fetch('/api/tasks')
         ]);
         
+        if (!needsRes.ok || !volsRes.ok || !tasksRes.ok) throw new Error('Network response was not ok');
+
         const needsData = await needsRes.json();
         const volsData = await volsRes.json();
         const tasksData = await tasksRes.json();
@@ -66,6 +69,8 @@ const VolunteerMatching = () => {
         setLoading(false);
       } catch (err) {
         console.error('Error fetching data:', err);
+        setErrorMatch('Failed to synchronize with central command.');
+        setTimeout(() => setErrorMatch(null), 3000);
       }
     };
     
@@ -74,6 +79,7 @@ const VolunteerMatching = () => {
 
   const handleMatch = async (needId: string) => {
     setMatchingId(needId);
+    setErrorMatch(null);
     try {
       const res = await fetch('/api/tasks/match', {
         method: 'POST',
@@ -83,6 +89,8 @@ const VolunteerMatching = () => {
       
       const result = await res.json();
       
+      if (!res.ok) throw new Error(result.error || 'Matching failed');
+
       if (result.success) {
         setSuccessMatch(`Successfully assigned to ${result.volunteer.name}`);
         // Refresh data
@@ -100,8 +108,10 @@ const VolunteerMatching = () => {
         setVolunteers(volsData.filter((v: Volunteer) => v.status === 'online'));
         setTasks(tasksData);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Match error:', err);
+      setErrorMatch(err.message || 'Unable to compute optimal match.');
+      setTimeout(() => setErrorMatch(null), 3000);
     } finally {
       setMatchingId(null);
       setTimeout(() => setSuccessMatch(null), 3000);
@@ -153,6 +163,17 @@ const VolunteerMatching = () => {
             >
               <CheckCircle2 size={20} />
               {successMatch}
+            </motion.div>
+          )}
+          {errorMatch && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="mb-6 bg-amber-500 text-white p-4 rounded-2xl shadow-lg flex items-center justify-center gap-2 font-bold"
+            >
+              <AlertCircle size={20} />
+              {errorMatch}
             </motion.div>
           )}
         </AnimatePresence>

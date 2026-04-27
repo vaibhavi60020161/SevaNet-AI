@@ -14,26 +14,54 @@ const Register = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setLoading(true);
     setError('');
+    setRetryCountdown(null);
+
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, name, adminCode })
       });
+
+      if (res.status === 500) {
+        throw new Error('Database connection failed');
+      }
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Registration failed');
       
       login(data.token, data.user);
       navigate('/');
     } catch (err: any) {
-      setError(err.message);
+      if (err.message.includes('Database connection failed')) {
+        setError('Server is warming up, please try again in 10 seconds');
+        startRetryCountdown();
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const startRetryCountdown = () => {
+    let count = 10;
+    setRetryCountdown(count);
+    const interval = setInterval(() => {
+      count -= 1;
+      setRetryCountdown(count);
+      if (count === 0) {
+        clearInterval(interval);
+        setRetryCountdown(null);
+        handleSubmit();
+      }
+    }, 1000);
   };
 
   return (
@@ -109,9 +137,26 @@ const Register = () => {
           </div>
 
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs font-semibold flex items-center gap-2">
-              <AlertCircle size={14} />
-              {error}
+            <div className={`${
+              error.includes('warming up') 
+                ? 'bg-amber-50 text-amber-600 border border-amber-200' 
+                : 'bg-red-50 text-red-600 border border-red-200'
+            } p-4 rounded-xl text-xs font-bold flex flex-col gap-2 transition-all`}>
+              <div className="flex items-center gap-2">
+                <AlertCircle size={14} />
+                {error}
+              </div>
+              {retryCountdown !== null && (
+                <div className="flex items-center justify-between mt-1 pt-2 border-t border-amber-200/50">
+                  <span className="font-black italic uppercase tracking-tighter">Automatic Retry</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] opacity-70">Retrying in</span>
+                    <span className="w-5 h-5 bg-amber-200 text-amber-700 rounded-md flex items-center justify-center font-black animate-pulse">
+                      {retryCountdown}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

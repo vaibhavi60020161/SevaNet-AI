@@ -8,18 +8,36 @@ const Dashboard = () => {
   const [needs, setNeeds] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const [error, setError] = useState(false);
+
+  const fetchData = () => {
+    setLoading(true);
+    setError(false);
     Promise.all([
-      fetch('/api/stats').then(res => res.json().catch(() => ({ activeNeeds: 0, volunteersOnline: 0, tasksCompleted: 0 }))),
-      fetch('/api/needs').then(res => res.json().catch(() => []))
+      fetch('/api/stats').then(res => {
+        if (!res.ok) throw new Error();
+        return res.json();
+      }).catch(() => ({ activeNeeds: 0, volunteersOnline: 0, tasksCompleted: 0 })),
+      fetch('/api/needs').then(res => {
+        if (!res.ok) throw new Error();
+        return res.json();
+      }).catch(() => {
+        setError(true);
+        return [];
+      })
     ]).then(([statsData, needsData]) => {
       setStats(statsData);
       setNeeds(Array.isArray(needsData) ? needsData.slice(0, 8) : []); 
       setLoading(false);
     }).catch(err => {
-      console.error(err);
-      setLoading(false);
+       console.error(err);
+       setError(true);
+       setLoading(false);
     });
+  };
+
+  useEffect(() => {
+    fetchData();
   }, []);
 
   if (loading) return (
@@ -31,6 +49,25 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-10">
+      {error && (
+        <motion.div 
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-center justify-between text-amber-800"
+        >
+          <div className="flex items-center gap-3 font-bold text-sm">
+            <AlertTriangle className="text-amber-500" size={20} />
+            Live data unavailable — showing cached view
+          </div>
+          <button 
+            onClick={fetchData}
+            className="flex items-center gap-2 bg-amber-200 hover:bg-amber-300 px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+          >
+            <TrendingUp size={14} />
+            Retry Sync
+          </button>
+        </motion.div>
+      )}
       {/* Platform Banner */}
       <div className="bg-slate-900 rounded-2xl p-6 md:p-8 text-white relative overflow-hidden border border-white/10 shadow-2xl">
         <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/10 blur-3xl -mr-20 -mt-20" />

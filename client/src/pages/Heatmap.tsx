@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import React, { useEffect, useState, useMemo } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Filter, Info } from 'lucide-react';
+import { Filter, Info, Users, AlertTriangle, List, MapPin, Plus } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 
 interface Need {
   _id: string;
@@ -14,157 +16,288 @@ interface Need {
   lng: number;
   families: number;
   status: string;
+  createdAt: string;
 }
+
+// Custom Marker Component
+const CustomMarker = ({ need }: { need: Need; key?: string }) => {
+  const getUrgencyColor = (urgency: string) => {
+    switch (urgency.toLowerCase()) {
+      case 'critical': return '#ef4444';
+      case 'high': return '#f97316';
+      case 'medium': return '#eab308';
+      case 'low': return '#22c55e';
+      default: return '#94a3b8';
+    }
+  };
+
+  const color = getUrgencyColor(need.urgency);
+  const size = Math.min(Math.max(12 + (need.families / 5), 14), 22);
+  const isCritical = need.urgency.toLowerCase() === 'critical';
+
+  const icon = L.divIcon({
+    className: 'custom-div-icon',
+    html: `
+      <div style="position: relative; width: ${size}px; height: ${size}px;">
+        ${isCritical ? `
+          <div style="
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: ${color};
+            opacity: 0.4;
+            animation: pulse-ring 2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+          "></div>
+        ` : ''}
+        <div style="
+          position: absolute;
+          width: 80%;
+          height: 80%;
+          top: 10%;
+          left: 10%;
+          background: ${color};
+          border: 2px solid white;
+          border-radius: 50%;
+          box-shadow: 0 0 10px ${color}80;
+          z-index: 2;
+        "></div>
+      </div>
+      <style>
+        @keyframes pulse-ring {
+          0% { transform: scale(0.33); opacity: 0.8; }
+          80%, 100% { transform: scale(2.5); opacity: 0; }
+        }
+      </style>
+    `,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+
+  return (
+    <Marker position={[need.lat || 18.52, need.lng || 73.85]} icon={icon}>
+      <Popup className="custom-popup">
+        <div className="p-1 min-w-[200px]">
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="font-bold text-slate-900 leading-tight mr-2">{need.title}</h3>
+            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+              need.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+            }`}>
+              {need.status}
+            </span>
+          </div>
+          <div className="space-y-2 text-xs">
+            <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+              <MapPin size={12} /> {need.location}
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+               <span className="font-bold text-slate-400 uppercase tracking-widest text-[9px]">{need.category}</span>
+               <div className="flex items-center gap-1">
+                 <Users size={12} className="text-slate-400" />
+                 <span className="font-bold text-slate-700">{need.families} families</span>
+               </div>
+            </div>
+            <div 
+              className="mt-1 w-full text-center py-1 rounded text-[10px] font-black uppercase tracking-tighter"
+              style={{ backgroundColor: `${color}15`, color }}
+            >
+              {need.urgency} Priority
+            </div>
+          </div>
+        </div>
+      </Popup>
+    </Marker>
+  );
+};
+
+// Map Auto-fitter
+const MapAutoFitter = ({ needs }: { needs: Need[] }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (needs.length > 0) {
+      const bounds = L.latLngBounds(needs.map(n => [n.lat || 18.52, n.lng || 73.85]));
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }, [needs, map]);
+  return null;
+};
 
 const Heatmap = () => {
   const [needs, setNeeds] = useState<Need[]>([]);
   const [filter, setFilter] = useState('All');
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    fetch('/api/needs')
-      .then((res) => res.json())
-      .then((data) => {
-        setNeeds(data);
-        setLoading(false);
-      })
-      .catch((err) => console.error('Error fetching needs:', err));
-  }, []);
-
-  const getUrgencyColor = (urgency: string) => {
-    switch (urgency.toLowerCase()) {
-      case 'critical': return '#ef4444'; // red-500
-      case 'high': return '#f97316'; // orange-500
-      case 'medium': return '#eab308'; // yellow-500
-      case 'low': return '#22c55e'; // green-500
-      default: return '#94a3b8'; // slate-400
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/needs');
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+      setNeeds(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const filteredNeeds = filter === 'All' 
-    ? needs 
-    : needs.filter(n => n.category.toLowerCase() === filter.toLowerCase());
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const center: [number, number] = [18.5204, 73.8567];
+  const filteredNeeds = useMemo(() => {
+    return filter === 'All' 
+      ? needs 
+      : needs.filter(n => n.category.toLowerCase() === filter.toLowerCase());
+  }, [needs, filter]);
+
+  const stats = useMemo(() => {
+    const counts = { critical: 0, high: 0, medium: 0, low: 0, total: filteredNeeds.length, families: 0 };
+    filteredNeeds.forEach(n => {
+      const u = n.urgency.toLowerCase() as keyof typeof counts;
+      if (counts[u] !== undefined) counts[u]++;
+      counts.families += (n.families || 1);
+    });
+    return counts;
+  }, [filteredNeeds]);
+
+  const recentNeeds = useMemo(() => {
+    return [...filteredNeeds].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8);
+  }, [filteredNeeds]);
+
+  const urgencyColors = {
+    critical: '#ef4444',
+    high: '#f97316',
+    medium: '#eab308',
+    low: '#22c55e'
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-7xl mx-auto"
-      >
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Needs Heatmap</h1>
-            <p className="text-slate-600">Visualizing resource requirements across Pune</p>
-          </div>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* Top Summary Cards */}
+      <div className="p-6 pb-0 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-7xl w-full mx-auto">
+        {Object.entries(urgencyColors).map(([level, color]) => (
+          <motion.div 
+            key={level}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between"
+          >
+            <div>
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-0.5">{level}</p>
+              <h4 className="text-2xl font-black text-slate-900 leading-none">{stats[level as keyof typeof stats]}</h4>
+            </div>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${color}15`, color }}>
+               <AlertTriangle size={20} />
+            </div>
+          </motion.div>
+        ))}
+      </div>
 
-          <div className="flex items-center gap-2 bg-white p-2 rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
-            <Filter size={18} className="text-slate-400 ml-2 shrink-0" />
+      <div className="flex-1 p-6 grid grid-cols-1 lg:grid-cols-4 gap-6 max-w-7xl w-full mx-auto h-[calc(100vh-160px)]">
+        <div className="lg:col-span-3 flex flex-col gap-4">
+          {/* Filter Bar */}
+          <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-2 overflow-x-auto">
+            <div className="px-3 text-slate-400 border-r border-slate-100 flex items-center gap-2">
+              <Filter size={16} />
+              <span className="text-[10px] font-black uppercase tracking-widest hidden md:block">Filters</span>
+            </div>
             {['All', 'Food', 'Medical', 'Shelter', 'Education'].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setFilter(cat)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-tighter transition-all ${
                   filter === cat 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-slate-600 hover:bg-slate-100'
+                    ? 'bg-slate-900 text-white shadow-lg' 
+                    : 'text-slate-500 hover:bg-slate-100'
                 }`}
               >
                 {cat}
               </button>
             ))}
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3 h-[600px] rounded-2xl overflow-hidden shadow-lg border border-slate-200 relative">
-            {loading ? (
-              <div className="absolute inset-0 bg-white flex items-center justify-center z-50">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              </div>
-            ) : null}
-            <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%' }}>
+          {/* Map Container */}
+          <div className="flex-1 rounded-3xl overflow-hidden shadow-2xl border-4 border-white relative">
+            {loading && (
+               <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-[1000] flex items-center justify-center">
+                 <div className="w-10 h-10 border-4 border-slate-900 border-t-transparent rounded-full animate-spin" />
+               </div>
+            )}
+            <MapContainer 
+              center={[18.5204, 73.8567]} 
+              zoom={13} 
+              style={{ height: '100%', width: '100%' }}
+              zoomControl={false}
+            >
               <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
               />
+              <MapAutoFitter needs={filteredNeeds} />
               {filteredNeeds.map((need) => (
-                <CircleMarker
-                  key={need._id}
-                  center={[need.lat || 18.52, need.lng || 73.85]}
-                  radius={10 + (need.families / 5)}
-                  fillColor={getUrgencyColor(need.urgency)}
-                  color="white"
-                  weight={1}
-                  opacity={1}
-                  fillOpacity={0.7}
-                >
-                  <Popup>
-                    <div className="p-1">
-                      <h3 className="font-bold text-slate-900 border-b pb-1 mb-2">{need.title}</h3>
-                      <div className="space-y-1 text-xs">
-                        <p><span className="font-semibold">Category:</span> {need.category}</p>
-                        <p><span className="font-semibold">Location:</span> {need.location}</p>
-                        <p><span className="font-semibold">Families:</span> {need.families}</p>
-                        <p><span className="font-semibold">Urgency:</span> 
-                          <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold" 
-                                style={{ backgroundColor: getUrgencyColor(need.urgency) + '20', color: getUrgencyColor(need.urgency) }}>
-                            {need.urgency}
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                  </Popup>
-                </CircleMarker>
+                <CustomMarker key={need._id} need={need} />
               ))}
             </MapContainer>
           </div>
+        </div>
 
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-              <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <Info size={20} className="text-blue-600" />
-                Map Legend
-              </h2>
-              <div className="space-y-3">
-                {[
-                  { label: 'Critical', color: '#ef4444' },
-                  { label: 'High', color: '#f97316' },
-                  { label: 'Medium', color: '#eab308' },
-                  { label: 'Low', color: '#22c55e' },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: item.color }}></div>
-                    <span className="text-sm text-slate-600 font-medium">{item.label} Urgency</span>
+        {/* Sidebar */}
+        <aside className="space-y-6 overflow-hidden flex flex-col">
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+            <h3 className="font-black italic uppercase tracking-tighter text-slate-900 mb-6 flex items-center gap-2">
+              <Info size={20} className="text-blue-600" />
+              Live Stats
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Active Reports</span>
+                <span className="text-lg font-black text-slate-900">{stats.total}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Families in Need</span>
+                <span className="text-lg font-black text-slate-900">{stats.families}</span>
+              </div>
+              <div className="pt-4 border-t border-slate-100 flex flex-wrap gap-2">
+                {Object.entries(urgencyColors).map(([level, color]) => (
+                  <div key={level} className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 rounded-lg">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                    <span className="text-[10px] font-black uppercase text-slate-500">{level}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-6 pt-6 border-t border-slate-100">
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  Size of the markers corresponds to the number of families affected. 
-                  Larger markers indicate higher density of need.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-blue-600 p-6 rounded-2xl shadow-lg text-white">
-              <h3 className="font-bold mb-2">Real-time Pulse</h3>
-              <p className="text-sm opacity-90 mb-4">
-                Currently tracking {filteredNeeds.length} {filter !== 'All' ? filter : ''} requests across the city.
-              </p>
-              <button 
-                onClick={() => window.location.href = '/submit-need'}
-                className="w-full py-2 bg-white text-blue-600 rounded-xl font-bold text-sm hover:bg-blue-50 transition-colors"
-                id="report-need-btn"
-              >
-                Report New Need
-              </button>
             </div>
           </div>
-        </div>
-      </motion.div>
+
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0">
+             <h3 className="font-black italic uppercase tracking-tighter text-slate-900 mb-6 flex items-center gap-2">
+              <List size={20} className="text-blue-600" />
+              Recent Alerts
+            </h3>
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-hide">
+              {recentNeeds.map(need => (
+                <div key={need._id} className="p-3 bg-slate-50 rounded-2xl hover:bg-slate-100 transition-colors border border-transparent hover:border-slate-200 group">
+                   <div className="flex items-start gap-3">
+                      <div className="mt-1.5 w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: urgencyColors[need.urgency.toLowerCase() as keyof typeof urgencyColors] || '#000' }} />
+                      <div className="min-w-0">
+                         <h4 className="text-[11px] font-black text-slate-900 leading-tight line-clamp-1 group-hover:line-clamp-none transition-all">{need.title}</h4>
+                         <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-0.5">{need.location}</p>
+                      </div>
+                   </div>
+                </div>
+              ))}
+            </div>
+            <button 
+              onClick={() => navigate('/submit-need')}
+              className="mt-6 w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase italic tracking-tighter flex items-center justify-center gap-2 shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all active:scale-95"
+            >
+              <Plus size={18} />
+              Report New Need
+            </button>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 };
