@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server/server.ts",
-    "build": "vite build client",
+    "build": "npm run build:client",
+    "build:client": "vite build client",
+    "start": "node --loader tsx/esm server/server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
