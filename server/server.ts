@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import connectDB, { getDb } from "./db";
@@ -9,79 +8,74 @@ import admin from "firebase-admin";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer() {
-  await connectDB();
-  
-  const app = express();
-  const PORT = 3000;
+const app = express();
+app.use(express.json());
 
-  app.use(express.json());
+// API Routes
+app.use("/api", apiRoutes);
 
-  // Seed Data if empty
-  const seedIfEmpty = async () => {
-    const db = getDb();
-    if (!db) return;
+// Seed Data if empty
+const seedIfEmpty = async () => {
+  const db = getDb();
+  if (!db) return;
 
-    const needsSnap = await db.collection("needs").limit(1).get();
-    if (needsSnap.empty) {
-      console.log("🌱 Seeding initial data to Firestore...");
-      
-      const needs = [
-        { title: "Food Crisis", category: "Food", location: "Hadapsar", lat: 18.5089, lng: 73.9259, urgency: "critical", families: 40, status: "pending", description: "Extreme shortage of dry rations in slum area.", createdAt: admin.firestore.FieldValue.serverTimestamp() },
-        { title: "Medical Support", category: "Medical", location: "Kothrud", lat: 18.5074, lng: 73.8077, urgency: "high", families: 15, status: "pending", description: "Insulin and basic antibiotics needed for elderly camp.", createdAt: admin.firestore.FieldValue.serverTimestamp() },
-        { title: "Education Kits", category: "Education", location: "Wanowrie", lat: 18.4901, lng: 73.8951, urgency: "medium", families: 22, status: "assigned", description: "Need 22 primary education kits for local school.", createdAt: admin.firestore.FieldValue.serverTimestamp() }
-      ];
-      
-      for (const need of needs) {
-        await db.collection("needs").add(need);
-      }
-
-      await db.collection("volunteers").add({ 
-        name: "Priya Sharma", 
-        skills: ["Food Logistics", "Coordination"], 
-        location: "Hadapsar", 
-        lat: 18.5080, 
-        lng: 73.9250, 
-        distance: 0.5, 
-        status: "online", 
-        activeTaskId: null,
-        impactScore: 10,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      await db.collection("volunteers").add({ 
-        name: "Dr. Anand Kumar", 
-        skills: ["Medical", "First Aid"], 
-        location: "Kothrud", 
-        lat: 18.5070, 
-        lng: 73.8070, 
-        distance: 1.2, 
-        status: "online", 
-        activeTaskId: null,
-        impactScore: 15,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      await db.collection("tasks").add({ 
-        title: "Deliver Education Kits", 
-        location: "Wanowrie", 
-        assignedTo: "Sneha Rao", 
-        status: "In Progress", 
-        deadline: "Today 5PM",
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      console.log("✅ Seeding complete");
+  const needsSnap = await db.collection("needs").limit(1).get();
+  if (needsSnap.empty) {
+    console.log("🌱 Seeding initial data to Firestore...");
+    
+    const needs = [
+      { title: "Food Crisis", category: "Food", location: "Hadapsar", lat: 18.5089, lng: 73.9259, urgency: "critical", families: 40, status: "pending", description: "Extreme shortage of dry rations in slum area.", createdAt: admin.firestore.FieldValue.serverTimestamp() },
+      { title: "Medical Support", category: "Medical", location: "Kothrud", lat: 18.5074, lng: 73.8077, urgency: "high", families: 15, status: "pending", description: "Insulin and basic antibiotics needed for elderly camp.", createdAt: admin.firestore.FieldValue.serverTimestamp() },
+      { title: "Education Kits", category: "Education", location: "Wanowrie", lat: 18.4901, lng: 73.8951, urgency: "medium", families: 22, status: "assigned", description: "Need 22 primary education kits for local school.", createdAt: admin.firestore.FieldValue.serverTimestamp() }
+    ];
+    
+    for (const need of needs) {
+      await db.collection("needs").add(need);
     }
-  };
-  
-  await seedIfEmpty();
 
-  // API Routes
-  app.use("/api", apiRoutes);
+    await db.collection("volunteers").add({ 
+      name: "Priya Sharma", 
+      skills: ["Food Logistics", "Coordination"], 
+      location: "Hadapsar", 
+      lat: 18.5080, 
+      lng: 73.9250, 
+      distance: 0.5, 
+      status: "online", 
+      activeTaskId: null,
+      impactScore: 10,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
-  // --- VITE MIDDLEWARE ---
+    await db.collection("volunteers").add({ 
+      name: "Dr. Anand Kumar", 
+      skills: ["Medical", "First Aid"], 
+      location: "Kothrud", 
+      lat: 18.5070, 
+      lng: 73.8070, 
+      distance: 1.2, 
+      status: "online", 
+      activeTaskId: null,
+      impactScore: 15,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await db.collection("tasks").add({ 
+      title: "Deliver Education Kits", 
+      location: "Wanowrie", 
+      assignedTo: "Sneha Rao", 
+      status: "In Progress", 
+      deadline: "Today 5PM",
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    console.log("✅ Seeding complete");
+  }
+};
+
+// --- VITE MIDDLEWARE SETUP ---
+async function setupVite(app: express.Express) {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -95,10 +89,31 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
 }
 
-startServer();
+async function startServer() {
+  await connectDB();
+  await setupVite(app);
+  
+  if (process.env.NODE_ENV !== "production" || process.env.ENABLE_SEEDING === "true") {
+    await seedIfEmpty();
+  }
+
+  const PORT = 3000;
+  if (process.env.VITE_DEV_SERVER !== "true" && !process.env.VERCEL) {
+     app.listen(PORT, "0.0.0.0", () => {
+       console.log(`Server running on http://localhost:${PORT}`);
+     });
+  }
+}
+
+// In serverless environments, we initialize but don't call listen()
+if (process.env.VERCEL) {
+  // We can't easily await inside the export path for some serverless runtimes
+  // So we ensure initialization happens on the first request or at module load via connectDB
+  connectDB().then(() => setupVite(app));
+} else {
+  startServer();
+}
+
+export default app;
