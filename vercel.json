@@ -1,22 +1,24 @@
 {
   "version": 2,
   "functions": {
-    "server/server.ts": {
-      "runtime": "vercel-node@latest"
+    "api/index.ts": {
+      "includeFiles": "client/dist/**"
     }
   },
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "server/server.ts"
+      "dest": "/api/index.ts"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/client/dist/assets/$1"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
-      "dest": "server/server.ts"
+      "dest": "/api/index.ts"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }

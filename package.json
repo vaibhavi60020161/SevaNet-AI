@@ -6,11 +6,11 @@
   "scripts": {
     "dev": "tsx server/server.ts",
     "build": "npm run build:client",
-    "build:client": "vite build client",
+    "build:client": "vite build --config client/vite.config.ts",
     "start": "node --loader tsx/esm server/server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit -p client/tsconfig.json"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -24,7 +24,6 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "firebase-admin": "^13.8.0",
     "jsonwebtoken": "^9.0.3",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",

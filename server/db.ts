@@ -1,104 +1,103 @@
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
-import path from "path";
-import fs from "fs";
+import mongoose from "mongoose";
 
-let firebaseConfig: any = null;
-let app: admin.app.App | null = null;
+const MONGODB_URI = process.env.MONGODB_URI;
 
-const loadConfig = () => {
-  if (firebaseConfig) return firebaseConfig;
-
-  // 1. Try environment variable (for Vercel/Production)
-  if (process.env.FIREBASE_CONFIG_JSON) {
-    try {
-      firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
-      return firebaseConfig;
-    } catch (e) {
-      console.error("Failed to parse FIREBASE_CONFIG_JSON", e);
-    }
-  }
-
-  // 2. Try local file (for Local Dev)
-  try {
-    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-    if (fs.existsSync(configPath)) {
-      firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-      return firebaseConfig;
-    }
-  } catch (e) {
-    console.error("Failed to read firebase-applet-config.json", e);
-  }
-
-  return null;
-};
-
-const connectDB = async () => {
-  try {
-    const config = loadConfig();
-    
-    if (admin.apps.length === 0) {
-      const options: admin.AppOptions = {
-        projectId: config?.projectId || process.env.FIREBASE_PROJECT_ID
-      };
-
-      // Handle Service Account if provided (required on Vercel)
-      if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        try {
-          const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-          options.credential = admin.credential.cert(serviceAccount);
-        } catch (e) {
-          console.error("❌ Failed to parse FIREBASE_SERVICE_ACCOUNT", e);
-        }
-      } else if (!process.env.VERCEL) {
-        // Fallback for local dev/Cloud Run only
-        try {
-          options.credential = admin.credential.applicationDefault();
-        } catch (e) {
-          console.warn("⚠️ applicationDefault() failed, using unauthenticated access where possible.");
-        }
-      }
-
-      if (!options.credential && process.env.VERCEL) {
-        console.error("❌ CRITICAL: FIREBASE_SERVICE_ACCOUNT environment variable is missing on Vercel!");
-      }
-
-      app = admin.initializeApp(options);
-      console.log("✅ Firebase Admin initialized successfully");
-    } else {
-      app = admin.apps[0]!;
-    }
-  } catch (error) {
-    console.error("❌ Firebase Admin initialization error:", error);
-  }
-};
-
-export const getDb = () => {
-  const config = loadConfig();
-  if (!app) {
-    if (admin.apps.length > 0) {
-      app = admin.apps[0]!;
-    } else {
-      // Emergency initialization if connectDB hasn't finished (serverless context)
-      const options: admin.AppOptions = {
-        projectId: config?.projectId || process.env.FIREBASE_PROJECT_ID
-      };
-      if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        options.credential = admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT));
-      } else {
-        options.credential = admin.credential.applicationDefault();
-      }
-      app = admin.initializeApp(options);
-    }
-  }
+export const connectDB = async () => {
+  if (mongoose.connection.readyState >= 1) return;
   
-  const databaseId = config?.firestoreDatabaseId || process.env.FIREBASE_DATABASE_ID;
-  if (databaseId) {
-    return getFirestore(app!, databaseId);
+  if (!MONGODB_URI || MONGODB_URI.startsWith("mongodb://localhost")) {
+    console.warn("⚠️ MONGODB_URI is missing or pointing to localhost. MongoDB Atlas connection is recommended for production.");
   }
-  return getFirestore(app!);
+
+  try {
+    await mongoose.connect(MONGODB_URI || "mongodb://localhost:27017/sevanet", {
+      serverSelectionTimeoutMS: 5000, 
+      connectTimeoutMS: 10000,
+    });
+    console.log("✅ MongoDB Connected");
+  } catch (err: any) {
+    console.error("❌ MongoDB Connection Error:", err.message);
+    if (MONGODB_URI) {
+      console.log(`ℹ️ MONGODB_URI Length: ${MONGODB_URI.length} chars`);
+      console.log(`ℹ️ MONGODB_URI Starts with: ${MONGODB_URI.substring(0, 20)}...`);
+    }
+    if (err.message.includes("ENOTFOUND")) {
+      console.error("👉 HINT: Your MONGODB_URI may be misconfigured. The host part looks wrong.");
+    }
+    throw err;
+  }
 };
 
-export const getAuth = () => admin.auth();
+// --- SCHEMAS ---
+
+const UserSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  name: { type: String, required: true },
+  role: { type: String, enum: ["user", "admin"], default: "user" },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const NeedSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  description: { type: String },
+  category: { type: String, required: true },
+  urgency: { type: String, enum: ["low", "medium", "high", "critical"], default: "medium" },
+  location: { type: String, required: true },
+  lat: { type: Number },
+  lng: { type: Number },
+  status: { type: String, enum: ["pending", "assigned", "completed"], default: "pending" },
+  families: { type: Number, default: 1 },
+  userId: { type: String },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const VolunteerSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  skills: [{ type: String }],
+  location: { type: String },
+  lat: { type: Number },
+  lng: { type: Number },
+  status: { type: String, enum: ["online", "busy", "offline"], default: "online" },
+  activeTaskId: { type: String, default: null },
+  impactScore: { type: Number, default: 0 },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const TaskSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  description: { type: String },
+  location: { type: String },
+  assignedTo: { type: String },
+  status: { type: String, default: "In Progress" },
+  deadline: { type: String },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const FeedbackSchema = new mongoose.Schema({
+  userId: { type: String },
+  userName: { type: String },
+  type: { type: String },
+  targetId: { type: String },
+  rating: { type: Number, required: true },
+  comment: { type: String },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const ImpactLogSchema = new mongoose.Schema({
+  event: { type: String, required: true },
+  desc: { type: String, required: true },
+  icon: { type: String },
+  timestamp: { type: Date, default: Date.now }
+});
+
+// --- MODELS ---
+
+export const User = mongoose.models.User || mongoose.model("User", UserSchema);
+export const Need = mongoose.models.Need || mongoose.model("Need", NeedSchema);
+export const Volunteer = mongoose.models.Volunteer || mongoose.model("Volunteer", VolunteerSchema);
+export const Task = mongoose.models.Task || mongoose.model("Task", TaskSchema);
+export const Feedback = mongoose.models.Feedback || mongoose.model("Feedback", FeedbackSchema);
+export const ImpactLog = mongoose.models.ImpactLog || mongoose.model("ImpactLog", ImpactLogSchema);
 
 export default connectDB;

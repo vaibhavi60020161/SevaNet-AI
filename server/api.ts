@@ -1,66 +1,75 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { getDb } from "./db";
-import admin from "firebase-admin";
+import connectDB, { User, Need, Volunteer, Task, Feedback, ImpactLog } from "./db.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "seva-secret-key";
 
-// Helper to handle Firestore errors
-function handleFirestoreError(error: any, operation: string, path: string | null) {
-  console.error(`Firestore Error [${operation}] at ${path}:`, error);
-  return { error: `Database error during ${operation}` };
+// Middleware to ensure DB connection
+router.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err: any) {
+    res.status(500).json({ 
+      error: "Database connection failed", 
+      details: err.message,
+      hint: "Check your MONGODB_URI environment variable."
+    });
+  }
+});
+
+// Helper to handle errors
+function handleError(error: any, operation: string, path: string | null) {
+  console.error(`Database Error [${operation}] at ${path}:`, error);
+  return { 
+    error: `Database error during ${operation}`, 
+    details: error.message,
+    path: path
+  };
 }
 
 // --- AUTH ROUTES ---
+
 router.post("/auth/register", async (req, res) => {
   try {
     const { email, password, name, adminCode } = req.body;
-    const db = getDb();
     
-    // Check if user exists in Firestore
-    const userSnap = await db.collection("users").where("email", "==", email).get();
-    if (!userSnap.empty) return res.status(400).json({ error: "User already exists" });
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ error: "User already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const role = adminCode === "SEVA_ADMIN_2026" ? "admin" : "user";
     
-    const userRef = db.collection("users").doc();
-    const newUser = {
-      uid: userRef.id,
+    const newUser = await User.create({
       email,
       password: hashedPassword,
       name,
-      role,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
+      role
+    });
     
-    await userRef.set(newUser);
-    
-    const token = jwt.sign({ id: userRef.id, role }, JWT_SECRET);
-    res.json({ token, user: { id: userRef.id, name, email, role } });
+    const token = jwt.sign({ id: newUser._id, role: newUser.role }, JWT_SECRET);
+    res.json({ token, user: { id: newUser._id, name: newUser.name, email: newUser.email, role: newUser.role } });
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "register", "users"));
+    res.status(500).json(handleError(err, "register", "users"));
   }
 });
 
 router.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    const db = getDb();
     
-    const userSnap = await db.collection("users").where("email", "==", email).get();
-    if (userSnap.empty) return res.status(400).json({ error: "Invalid credentials" });
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ error: "Invalid credentials" });
 
-    const userData = userSnap.docs[0].data();
-    const isMatch = await bcrypt.compare(password, userData.password);
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
 
-    const token = jwt.sign({ id: userSnap.docs[0].id, role: userData.role }, JWT_SECRET);
-    res.json({ token, user: { id: userSnap.docs[0].id, name: userData.name, email: userData.email, role: userData.role } });
+    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET);
+    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "login", "users"));
+    res.status(500).json(handleError(err, "login", "users"));
   }
 });
 
@@ -68,37 +77,33 @@ router.post("/auth/login", async (req, res) => {
 
 router.get("/stats", async (req, res) => {
   try {
-    const db = getDb();
-    const needsSnap = await db.collection("needs").where("status", "==", "pending").get();
-    const volunteersSnap = await db.collection("volunteers").where("status", "==", "online").get();
+    const activeNeeds = await Need.countDocuments({ status: "pending" });
+    const volunteersOnline = await Volunteer.countDocuments({ status: "online" });
     
     res.json({
-      activeNeeds: needsSnap.size,
-      volunteersOnline: volunteersSnap.size,
+      activeNeeds,
+      volunteersOnline,
       tasksCompleted: 45, // Placeholder or fetch from collection
       peopleHelped: 1250, // Placeholder
     });
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "stats", "multiple"));
+    res.status(500).json(handleError(err, "stats", "multiple"));
   }
 });
 
 router.get("/needs", async (req, res) => {
   try {
-    const db = getDb();
-    const snap = await db.collection("needs").orderBy("createdAt", "desc").get();
-    const needs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const needs = await Need.find().sort({ createdAt: -1 });
     res.json(needs);
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "list", "needs"));
+    res.status(500).json(handleError(err, "list", "needs"));
   }
 });
 
 router.post("/needs", async (req, res) => {
   try {
     const { title, description, category, urgency, location, userId } = req.body;
-    const db = getDb();
-    const newNeed = {
+    const newNeed = await Need.create({
       title,
       description,
       category,
@@ -107,45 +112,38 @@ router.post("/needs", async (req, res) => {
       userId,
       status: 'pending',
       lat: 18.5204 + (Math.random() - 0.5) * 0.1,
-      lng: 73.8567 + (Math.random() - 0.5) * 0.1,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
+      lng: 73.8567 + (Math.random() - 0.5) * 0.1
+    });
     
-    const docRef = await db.collection("needs").add(newNeed);
-    res.json({ id: docRef.id, ...newNeed });
+    res.json(newNeed);
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "create", "needs"));
+    res.status(500).json(handleError(err, "create", "needs"));
   }
 });
 
 router.get("/volunteers", async (req, res) => {
   try {
-    const db = getDb();
-    const snap = await db.collection("volunteers").get();
-    res.json(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    const volunteers = await Volunteer.find();
+    res.json(volunteers);
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "list", "volunteers"));
+    res.status(500).json(handleError(err, "list", "volunteers"));
   }
 });
 
 router.get("/tasks", async (req, res) => {
   try {
-    const db = getDb();
-    const snap = await db.collection("tasks").get();
-    res.json(snap.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        title: data.title,
-        description: data.description,
-        location: data.location,
-        assignedTo: data.assignedTo,
-        status: data.status.toLowerCase().replace(" ", "-"),
-        deadline: data.deadline
-      };
-    }));
+    const tasks = await Task.find();
+    res.json(tasks.map(task => ({
+      id: task._id,
+      title: task.title,
+      description: task.description,
+      location: task.location,
+      assignedTo: task.assignedTo,
+      status: task.status.toLowerCase().replace(" ", "-"),
+      deadline: task.deadline
+    })));
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "list", "tasks"));
+    res.status(500).json(handleError(err, "list", "tasks"));
   }
 });
 
@@ -170,11 +168,10 @@ router.get("/predictions", (req, res) => {
 router.post("/intake/text", async (req, res) => {
   try {
     const { text } = req.body;
-    const db = getDb();
     const category = text.toLowerCase().includes("food") ? "Food" : text.toLowerCase().includes("med") ? "Medical" : "Shelter";
     const urgency = text.toLowerCase().includes("critical") || text.toLowerCase().includes("urgent") ? "critical" : "medium";
     
-    const newNeed = {
+    const newNeed = await Need.create({
       title: `${category} Support Request`,
       category,
       location: "Generated Area",
@@ -183,63 +180,51 @@ router.post("/intake/text", async (req, res) => {
       urgency,
       families: Math.floor(Math.random() * 50) + 1,
       status: "pending",
-      description: text,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
+      description: text
+    });
     
-    const docRef = await db.collection("needs").add(newNeed);
-    res.json({ success: true, need: { id: docRef.id, ...newNeed } });
+    res.json({ success: true, need: newNeed });
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "create", "needs"));
+    res.status(500).json(handleError(err, "create", "needs"));
   }
 });
 
 router.post("/tasks/match", async (req, res) => {
   try {
     const { needId } = req.body;
-    const db = getDb();
     
-    const needRef = db.collection("needs").doc(needId);
-    const needSnap = await needRef.get();
-    if (!needSnap.exists) return res.status(404).json({ error: "Need not found" });
+    const need = await Need.findById(needId);
+    if (!need) return res.status(404).json({ error: "Need not found" });
 
-    const volunteerSnap = await db.collection("volunteers").where("status", "==", "online").limit(1).get();
-    if (volunteerSnap.empty) return res.status(400).json({ error: "No volunteers available" });
+    const volunteer = await Volunteer.findOne({ status: "online" });
+    if (!volunteer) return res.status(400).json({ error: "No volunteers available" });
 
-    const volunteerDoc = volunteerSnap.docs[0];
-    const volunteerData = volunteerDoc.data();
-    const needData = needSnap.data()!;
-
-    const newTask = {
-      title: `Response: ${needData.category} in ${needData.location}`,
-      location: needData.location,
-      assignedTo: volunteerData.name,
+    const newTask = await Task.create({
+      title: `Response: ${need.category} in ${need.location}`,
+      location: need.location,
+      assignedTo: volunteer.name,
       status: "In Progress",
-      deadline: "Within 2 hours",
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
+      deadline: "Within 2 hours"
+    });
     
-    const taskRef = await db.collection("tasks").add(newTask);
-    
-    await needRef.update({ status: "assigned" });
-    await volunteerDoc.ref.update({ 
+    await Need.findByIdAndUpdate(needId, { status: "assigned" });
+    await Volunteer.findByIdAndUpdate(volunteer._id, { 
       status: "busy",
-      activeTaskId: taskRef.id
+      activeTaskId: newTask._id
     });
 
-    res.json({ success: true, task: { id: taskRef.id, ...newTask }, volunteer: volunteerData });
+    res.json({ success: true, task: newTask, volunteer });
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "match", "transactions"));
+    res.status(500).json(handleError(err, "match", "transactions"));
   }
 });
 
 router.get("/impact", async (req, res) => {
   try {
-    const db = getDb();
-    const snap = await db.collection("impactLogs").orderBy("timestamp", "desc").get();
-    res.json(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    const logs = await ImpactLog.find().sort({ timestamp: -1 });
+    res.json(logs);
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "list", "impactLogs"));
+    res.status(500).json(handleError(err, "list", "impactLogs"));
   }
 });
 
@@ -247,42 +232,35 @@ router.get("/impact", async (req, res) => {
 router.post("/feedback", async (req, res) => {
   try {
     const { userId, userName, type, targetId, rating, comment } = req.body;
-    const db = getDb();
     
-    const newFeedback = {
+    const newFeedback = await Feedback.create({
       userId,
       userName,
       type,
       targetId,
       rating,
-      comment,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
-    
-    const feedbackRef = await db.collection("feedback").add(newFeedback);
+      comment
+    });
 
     if (type === 'volunteer' && targetId) {
-      const volSnap = await db.collection("volunteers").where("name", "==", targetId).limit(1).get();
-      if (!volSnap.empty) {
-        await volSnap.docs[0].ref.update({
-          impactScore: admin.firestore.FieldValue.increment(rating)
-        });
-      }
+      await Volunteer.findOneAndUpdate(
+        { name: targetId },
+        { $inc: { impactScore: rating } }
+      );
     }
 
-    res.json({ success: true, feedback: { id: feedbackRef.id, ...newFeedback } });
+    res.json({ success: true, feedback: newFeedback });
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "create", "feedback"));
+    res.status(500).json(handleError(err, "create", "feedback"));
   }
 });
 
 router.get("/feedback", async (req, res) => {
   try {
-    const db = getDb();
-    const snap = await db.collection("feedback").orderBy("createdAt", "desc").get();
-    res.json(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    const feedback = await Feedback.find().sort({ createdAt: -1 });
+    res.json(feedback);
   } catch (err) {
-    res.status(500).json(handleFirestoreError(err, "list", "feedback"));
+    res.status(500).json(handleError(err, "list", "feedback"));
   }
 });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, MessageSquare, User, Calendar, Tag, BarChart3 } from 'lucide-react';
+import { Star, MessageSquare, User, Calendar, Tag, BarChart3, Heart } from 'lucide-react';
 import { motion } from 'motion/react';
 
 const AdminFeedback = () => {

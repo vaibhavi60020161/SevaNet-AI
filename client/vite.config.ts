@@ -7,7 +7,8 @@ export default defineConfig(({mode}) => {
   const env = loadEnv(mode, path.resolve(__dirname, '..'), '');
   return {
     plugins: [react(), tailwindcss()],
-    base: '/SevaNet-AI/', // Add this line for GitHub Pages path
+    root: path.resolve(__dirname, '.'),
+    base: process.env.GITHUB_PAGES === 'true' ? '/SevaNet-AI/' : '/',
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },
